@@ -1,0 +1,208 @@
+@page "/appointments"
+@using BookItLite.Data
+@using BookItLite.Models
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@rendermode InteractiveServer
+
+<PageTitle>Appointments</PageTitle>
+
+<h1>Appointments</h1>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="alert alert-success mt-3">@message</div>
+}
+
+<div class="form-card">
+    <EditForm Model="bookingForm" OnValidSubmit="BookAppointmentAsync">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Service</label>
+                <InputSelect class="form-select" @bind-Value="bookingForm.ServiceId">
+                    <option value="0">Select a service</option>
+                    @foreach (var service in services)
+                    {
+                        <option value="@service.Id">@service.Name</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Customer name</label>
+                <InputText class="form-control" @bind-Value="bookingForm.CustomerName" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Email</label>
+                <InputText class="form-control" @bind-Value="bookingForm.CustomerEmail" />
+            </div>
+            <div class="col-md-5">
+                <label class="form-label">Appointment start</label>
+                <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="bookingForm.StartUtc" />
+            </div>
+            <div class="col-md-7">
+                <label class="form-label">Notes</label>
+                <InputTextArea class="form-control" @bind-Value="bookingForm.Notes" />
+            </div>
+        </div>
+
+        <button class="btn btn-primary mt-3" type="submit">Book appointment</button>
+    </EditForm>
+</div>
+
+<div class="mt-4">
+    <h3>Upcoming schedule</h3>
+
+    @if (!appointments.Any())
+    {
+        <p class="text-muted">No bookings have been made yet.</p>
+    }
+    else
+    {
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Service</th>
+                    <th>Time</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var appointment in appointments)
+                {
+                    <tr>
+                        <td>@appointment.CustomerName</td>
+                        <td>@appointment.BookingService.Name</td>
+                        <td>@appointment.StartUtc.ToLocalTime().ToString("ddd, MMM d")<br />@appointment.StartUtc.ToLocalTime().ToString("h:mm tt") - @appointment.EndUtc.ToLocalTime().ToString("h:mm tt")</td>
+                        <td>
+                            <span class="status-badge @GetStatusClass(appointment.Status)">@appointment.Status</span>
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-sm btn-outline-success" type="button" @onclick="() => UpdateStatusAsync(appointment.Id, AppointmentStatus.Confirmed)">Confirm</button>
+                                <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => UpdateStatusAsync(appointment.Id, AppointmentStatus.Completed)">Complete</button>
+                                <button class="btn btn-sm btn-outline-danger" type="button" @onclick="() => UpdateStatusAsync(appointment.Id, AppointmentStatus.Cancelled)">Cancel</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<BookingService> services = new();
+    private List<Appointment> appointments = new();
+    private AppointmentFormModel bookingForm = new();
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        services = await Db.BookingServices
+            .Where(s => s.IsActive)
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+
+        appointments = await Db.Appointments
+            .Include(a => a.BookingService)
+            .OrderBy(a => a.StartUtc)
+            .ToListAsync();
+    }
+
+    private async Task BookAppointmentAsync()
+    {
+        if (bookingForm.ServiceId == 0)
+        {
+            message = "Please select a service.";
+            return;
+        }
+
+        var service = await Db.BookingServices.FindAsync(bookingForm.ServiceId);
+        if (service is null)
+        {
+            message = "The selected service is unavailable.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(bookingForm.CustomerName))
+        {
+            message = "Customer name is required.";
+            return;
+        }
+
+        var start = bookingForm.StartUtc;
+        var end = start.AddMinutes(service.DurationMinutes);
+
+        var conflictExists = await Db.Appointments.AnyAsync(a =>
+            a.BookingServiceId == service.Id &&
+            a.Status != AppointmentStatus.Cancelled &&
+            a.StartUtc < end &&
+            a.EndUtc > start);
+
+        if (conflictExists)
+        {
+            message = "This slot is already booked. Please pick a different time.";
+            return;
+        }
+
+        var appointment = new Appointment
+        {
+            BookingServiceId = service.Id,
+            CustomerName = bookingForm.CustomerName,
+            CustomerEmail = bookingForm.CustomerEmail,
+            StartUtc = start,
+            EndUtc = end,
+            Status = AppointmentStatus.Confirmed,
+            Notes = bookingForm.Notes
+        };
+
+        Db.Appointments.Add(appointment);
+        await Db.SaveChangesAsync();
+
+        message = $"Appointment booked for {service.Name} on {start:MMM d, yyyy at h:mm tt}.";
+        bookingForm = new AppointmentFormModel();
+        await LoadAsync();
+    }
+
+    private async Task UpdateStatusAsync(int id, AppointmentStatus status)
+    {
+        var appointment = await Db.Appointments.FindAsync(id);
+        if (appointment is null)
+        {
+            return;
+        }
+
+        appointment.Status = status;
+        await Db.SaveChangesAsync();
+        message = $"Appointment status updated to {status}.";
+        await LoadAsync();
+    }
+
+    private static string GetStatusClass(AppointmentStatus status)
+    {
+        return status switch
+        {
+            AppointmentStatus.Pending => "status-pending",
+            AppointmentStatus.Confirmed => "status-confirmed",
+            AppointmentStatus.Completed => "status-completed",
+            AppointmentStatus.Cancelled => "status-cancelled",
+            _ => string.Empty
+        };
+    }
+
+    private sealed class AppointmentFormModel
+    {
+        public int ServiceId { get; set; }
+        public string CustomerName { get; set; } = string.Empty;
+        public string CustomerEmail { get; set; } = string.Empty;
+        public DateTime StartUtc { get; set; } = DateTime.UtcNow.AddDays(1).Date.AddHours(10);
+        public string Notes { get; set; } = string.Empty;
+    }
+}
