@@ -1,0 +1,162 @@
+@page "/availability"
+@using BookItLite.Data
+@using BookItLite.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@attribute [Authorize(Roles = "Provider")]
+@inject ApplicationDbContext Db
+@rendermode InteractiveServer
+
+<PageTitle>Availability</PageTitle>
+
+<h1>Schedule availability</h1>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="alert alert-info mt-3">@message</div>
+}
+
+<div class="form-card">
+    <EditForm Model="slotForm" OnValidSubmit="SaveSlotAsync">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Service</label>
+                <InputSelect class="form-select" @bind-Value="slotForm.ServiceId">
+                    <option value="0">Select a service</option>
+                    @foreach (var service in services)
+                    {
+                        <option value="@service.Id">@service.Name</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Start</label>
+                <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="slotForm.StartUtc" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">End</label>
+                <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="slotForm.EndUtc" />
+            </div>
+        </div>
+
+        <button class="btn btn-primary mt-3" type="submit">Add availability</button>
+    </EditForm>
+</div>
+
+<div class="mt-4">
+    <h3>Available time slots</h3>
+
+    @if (!availability.Any())
+    {
+        <p class="text-muted">No time slots available yet.</p>
+    }
+    else
+    {
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>When</th>
+                    <th>Notes</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var slot in availability)
+                {
+                    <tr>
+                        <td>@slot.BookingService.Name</td>
+                        <td>@slot.StartUtc.ToLocalTime().ToString("ddd, MMM d")<br />@slot.StartUtc.ToLocalTime().ToString("h:mm tt") - @slot.EndUtc.ToLocalTime().ToString("h:mm tt")</td>
+                        <td>@(string.IsNullOrWhiteSpace(slot.Notes) ? "Standard opening" : slot.Notes)</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-danger" type="button" @onclick="() => DeleteSlotAsync(slot.Id)">Remove</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<BookingService> services = new();
+    private List<AvailabilitySlot> availability = new();
+    private SlotFormModel slotForm = new();
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        services = await Db.BookingServices
+            .Where(s => s.IsActive)
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+
+        availability = await Db.AvailabilitySlots
+            .Include(s => s.BookingService)
+            .OrderBy(s => s.StartUtc)
+            .ToListAsync();
+    }
+
+    private async Task SaveSlotAsync()
+    {
+        if (slotForm.ServiceId == 0)
+        {
+            message = "Please select a service.";
+            return;
+        }
+
+        if (slotForm.StartUtc >= slotForm.EndUtc)
+        {
+            message = "The end time must be later than the start time.";
+            return;
+        }
+
+        var service = await Db.BookingServices.FindAsync(slotForm.ServiceId);
+        if (service is null)
+        {
+            message = "The selected service was not found.";
+            return;
+        }
+
+        var slot = new AvailabilitySlot
+        {
+            BookingServiceId = service.Id,
+            StartUtc = slotForm.StartUtc,
+            EndUtc = slotForm.EndUtc,
+            Notes = "Provider-managed slot"
+        };
+
+        Db.AvailabilitySlots.Add(slot);
+        await Db.SaveChangesAsync();
+
+        message = $"Availability added for {service.Name}.";
+        slotForm = new SlotFormModel();
+        await LoadAsync();
+    }
+
+    private async Task DeleteSlotAsync(int id)
+    {
+        var slot = await Db.AvailabilitySlots.FindAsync(id);
+        if (slot is null)
+        {
+            return;
+        }
+
+        Db.AvailabilitySlots.Remove(slot);
+        await Db.SaveChangesAsync();
+        message = "The slot was removed.";
+        await LoadAsync();
+    }
+
+    private sealed class SlotFormModel
+    {
+        public int ServiceId { get; set; }
+        public DateTime StartUtc { get; set; } = DateTime.UtcNow.AddDays(1).Date.AddHours(9);
+        public DateTime EndUtc { get; set; } = DateTime.UtcNow.AddDays(1).Date.AddHours(10);
+    }
+}
