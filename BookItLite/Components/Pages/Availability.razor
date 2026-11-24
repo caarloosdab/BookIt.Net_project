@@ -3,8 +3,10 @@
 @using BookItLite.Models
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
+@using BookItLite.Services
 @attribute [Authorize(Roles = "Provider")]
 @inject ApplicationDbContext Db
+@inject TimeZoneService TimeZone
 @rendermode InteractiveServer
 
 <PageTitle>Availability</PageTitle>
@@ -58,6 +60,7 @@
                     <th>Service</th>
                     <th>When</th>
                     <th>Notes</th>
+                    <th>Status</th>
                     <th></th>
                 </tr>
             </thead>
@@ -66,8 +69,18 @@
                 {
                     <tr>
                         <td>@slot.BookingService.Name</td>
-                        <td>@slot.StartUtc.ToLocalTime().ToString("ddd, MMM d")<br />@slot.StartUtc.ToLocalTime().ToString("h:mm tt") - @slot.EndUtc.ToLocalTime().ToString("h:mm tt")</td>
+                        <td>@TimeZone.ToLocal(slot.StartUtc).ToString("ddd, MMM d")<br />@TimeZone.ToLocal(slot.StartUtc).ToString("h:mm tt") - @TimeZone.ToLocal(slot.EndUtc).ToString("h:mm tt")</td>
                         <td>@(string.IsNullOrWhiteSpace(slot.Notes) ? "Standard opening" : slot.Notes)</td>
+                        <td>
+                            @if (slot.IsBooked)
+                            {
+                                <span class="badge bg-danger">Booked</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success">Available</span>
+                            }
+                        </td>
                         <td class="text-end">
                             <button class="btn btn-sm btn-outline-danger" type="button" @onclick="() => DeleteSlotAsync(slot.Id)">Remove</button>
                         </td>
@@ -84,9 +97,28 @@
     private SlotFormModel slotForm = new();
     private string? message;
 
-    protected override async Task OnInitializedAsync()
+    private void ResetSlotForm()
     {
-        await LoadAsync();
+        var tomorrow = TimeZone.ToLocal(DateTime.UtcNow).Date.AddDays(1);
+
+        slotForm = new SlotFormModel
+        {
+            StartUtc = tomorrow.AddHours(9),
+            EndUtc = tomorrow.AddHours(10)
+        };
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await TimeZone.InitializeAsync();
+
+            ResetSlotForm();
+
+            await LoadAsync();
+
+            StateHasChanged();
+        }
     }
 
     private async Task LoadAsync()
@@ -98,10 +130,11 @@
 
         availability = await Db.AvailabilitySlots
             .Include(s => s.BookingService)
-            .OrderBy(s => s.StartUtc)
+            .OrderByDescending(s => s.StartUtc)
             .ToListAsync();
     }
 
+ 
     private async Task SaveSlotAsync()
     {
         if (slotForm.ServiceId == 0)
@@ -117,39 +150,74 @@
         }
 
         var service = await Db.BookingServices.FindAsync(slotForm.ServiceId);
+
         if (service is null)
         {
             message = "The selected service was not found.";
+            return;
+        }
+        var startUtc = TimeZone.ToUtc(slotForm.StartUtc);
+        var endUtc = TimeZone.ToUtc(slotForm.EndUtc);
+
+        var conflictExists = await Db.AvailabilitySlots.AnyAsync(slot =>
+            slot.BookingServiceId == slotForm.ServiceId &&
+            slot.StartUtc < endUtc &&
+            slot.EndUtc > startUtc
+        );
+
+        if (conflictExists)
+        {
+            message = "This time slot overlaps with an existing availability. Please select another time.";
             return;
         }
 
         var slot = new AvailabilitySlot
         {
             BookingServiceId = service.Id,
-            StartUtc = slotForm.StartUtc,
-            EndUtc = slotForm.EndUtc,
+            StartUtc = startUtc,
+            EndUtc = endUtc,
             Notes = "Provider-managed slot"
         };
 
         Db.AvailabilitySlots.Add(slot);
+
         await Db.SaveChangesAsync();
 
-        message = $"Availability added for {service.Name}.";
-        slotForm = new SlotFormModel();
+        message = $"Availability added successfully for {service.Name}.";
+
+        ResetSlotForm();
+
         await LoadAsync();
     }
+
 
     private async Task DeleteSlotAsync(int id)
     {
         var slot = await Db.AvailabilitySlots.FindAsync(id);
+
         if (slot is null)
         {
+            message = "Availability slot not found.";
+            return;
+        }
+
+        var hasActiveAppointment = await Db.Appointments.AnyAsync(a =>
+            a.AvailabilitySlotId == id &&
+            (a.Status == AppointmentStatus.Pending ||
+            a.Status == AppointmentStatus.Confirmed));
+
+        if (slot.IsBooked || hasActiveAppointment)
+        {
+            message = "This slot cannot be removed because it has an active appointment. Cancel the appointment first.";
             return;
         }
 
         Db.AvailabilitySlots.Remove(slot);
+
         await Db.SaveChangesAsync();
+
         message = "The slot was removed.";
+
         await LoadAsync();
     }
 
