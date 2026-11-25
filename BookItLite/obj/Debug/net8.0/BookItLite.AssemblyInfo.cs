@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BookItLite")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7f08385e29f13f0e7216c7e0947d6e2dfa55a8a2")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e6f1e652f26b720e13444e5b08154ed19b40e28b")]
 [assembly: System.Reflection.AssemblyProductAttribute("BookItLite")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BookItLite")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
