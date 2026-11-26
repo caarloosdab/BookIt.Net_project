@@ -4,6 +4,7 @@ using BookItLite.Data;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using BookItLite.Services;
 
 namespace BookItLite;
 
@@ -42,6 +43,7 @@ public class Program
 
         builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
+        builder.Services.AddScoped<TimeZoneService>();
         var app = builder.Build();
 
         using (var scope = app.Services.CreateScope())

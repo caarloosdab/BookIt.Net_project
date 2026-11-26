@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Felix Morales\\Documents\\CSE 325\\BookIt.Net_project\\BookItLite\\BookItLite.csproj": {}
+    "D:\\2026 Block 6\\CSE325.002 - .NET Software Development\\project\\BookIt.Net_project\\BookItLite\\BookItLite.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Felix Morales\\Documents\\CSE 325\\BookIt.Net_project\\BookItLite\\BookItLite.csproj": {
+    "D:\\2026 Block 6\\CSE325.002 - .NET Software Development\\project\\BookIt.Net_project\\BookItLite\\BookItLite.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Felix Morales\\Documents\\CSE 325\\BookIt.Net_project\\BookItLite\\BookItLite.csproj",
+        "projectUniqueName": "D:\\2026 Block 6\\CSE325.002 - .NET Software Development\\project\\BookIt.Net_project\\BookItLite\\BookItLite.csproj",
         "projectName": "BookItLite",
-        "projectPath": "C:\\Users\\Felix Morales\\Documents\\CSE 325\\BookIt.Net_project\\BookItLite\\BookItLite.csproj",
-        "packagesPath": "C:\\Users\\Felix Morales\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Felix Morales\\Documents\\CSE 325\\BookIt.Net_project\\BookItLite\\obj\\",
+        "projectPath": "D:\\2026 Block 6\\CSE325.002 - .NET Software Development\\project\\BookIt.Net_project\\BookItLite\\BookItLite.csproj",
+        "packagesPath": "C:\\Users\\JIN_WOO_SUNG\\.nuget\\packages\\",
+        "outputPath": "D:\\2026 Block 6\\CSE325.002 - .NET Software Development\\project\\BookIt.Net_project\\BookItLite\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\Felix Morales\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\JIN_WOO_SUNG\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
